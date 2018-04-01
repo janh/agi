@@ -40,8 +40,9 @@ import (
 
 // Session is a struct holding AGI environment vars and the I/O handlers.
 type Session struct {
-	Env map[string]string //AGI environment variables.
-	buf *bufio.ReadWriter //AGI I/O buffer.
+	Env    map[string]string //AGI environment variables.
+	buf    *bufio.ReadWriter //AGI I/O buffer.
+	hungup bool              //whether a HANGUP request has been received
 }
 
 // Reply is a struct that holds the return values of each AGI command.
@@ -68,6 +69,11 @@ func (a *Session) Init(rw *bufio.ReadWriter) error {
 	}
 	err := a.parseEnv()
 	return err
+}
+
+// IsHungup returns true if the channel is hung up.
+func (a *Session) IsHungup() bool {
+	return a.hungup
 }
 
 // Answer answers channel. Res is -1 on channel failure, or 0 if successful.

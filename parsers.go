@@ -52,9 +52,14 @@ func (a *Session) parseEnv() error {
 // sendMsg sends an AGI command and returns the result.
 func (a *Session) sendMsg(s string) (Reply, error) {
 	// Make sure there wasn't any data received, usually a HANGUP request from asterisk.
-	if i := a.buf.Reader.Buffered(); i != 0 {
+	for a.buf.Reader.Buffered() != 0 {
 		line, _ := a.buf.ReadBytes(10)
-		return Reply{}, fmt.Errorf(string(line[:len(line)-1]))
+		line = line[:len(line)-1]
+		if bytes.Equal(line, []byte("HANGUP")) {
+			a.hungup = true
+		} else {
+			return Reply{}, fmt.Errorf(string(line))
+		}
 	}
 	s = strings.Replace(s, "\r", " ", -1)
 	s = strings.Replace(s, "\n", " ", -1)
@@ -70,20 +75,26 @@ func (a *Session) sendMsg(s string) (Reply, error) {
 // parseResponse reads back and parses AGI response. Returns the Reply and the protocol error, if any.
 func (a *Session) parseResponse() (Reply, error) {
 	r := Reply{}
-	line, err := a.buf.ReadBytes(10)
-	if err != nil {
-		return r, err
+	var line []byte
+	var err error
+	for {
+		line, err = a.buf.ReadBytes(10)
+		if err != nil {
+			return r, err
+		}
+		// Strip trailing newline
+		line = line[:len(line)-1]
+		// check for HANGUP request
+		if bytes.Equal(line, []byte("HANGUP")) {
+			a.hungup = true
+			continue
+		}
+		break
 	}
-	// Strip trailing newline
-	line = line[:len(line)-1]
 	ind := bytes.IndexByte(line, ' ')
 	if ind <= 0 || ind == len(line)-1 {
 		// Line doesn't match /^\w+\s.+$/
-		if bytes.Equal(line, []byte("HANGUP")) {
-			err = errors.New("HANGUP")
-		} else {
-			err = fmt.Errorf("malformed or partial agi response: %s", string(line))
-		}
+		err = fmt.Errorf("malformed or partial agi response: %s", string(line))
 		return r, err
 	}
 	switch string(line[:ind]) {

@@ -60,6 +60,7 @@ var rep = []byte(
 520-Invalid command syntax.  Proper usage follows:
 Answers channel if not already in answer state. Returns -1 on channel failure, or 0 if successful.520 End of proper usage.
 HANGUP
+200 result=1
 `)
 
 var repInv = []byte(
@@ -162,9 +163,18 @@ func TestParseRespomse(t *testing.T) {
 	if err == nil {
 		t.Error("No error after parsing AGI 520 response containing usage details.")
 	}
-	_, err = a.parseResponse()
-	if err == nil || err.Error() != "HANGUP" {
-		t.Error("Failed to detect a HANGUP reguest.")
+	r, err := a.parseResponse()
+	if !a.IsHangup() {
+		t.Error("Failed to detect a HANGUP request.")
+	}
+	if err != nil {
+		t.Errorf("Error parsing AGI 200 response after HANGUP: %v", err)
+	}
+	if r.Res != 1 {
+		t.Errorf("Error parsing AGI 200 response after HANGUP. Expecting: 1, got: %d", r.Res)
+	}
+	if r.Dat != "" {
+		t.Errorf("Error parsing AGI 200 response after HANGUP. Got unexpected data: %s", r.Dat)
 	}
 	// Invalid responses
 	b := New()
