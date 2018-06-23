@@ -163,8 +163,8 @@ func TestParseRespomse(t *testing.T) {
 	if err == nil {
 		t.Error("No error after parsing AGI 520 response containing usage details.")
 	}
-	r, err := a.parseResponse()
-	if !a.IsHangup() {
+	r, err = a.parseResponse()
+	if !a.IsHungup() {
 		t.Error("Failed to detect a HANGUP request.")
 	}
 	if err != nil {
