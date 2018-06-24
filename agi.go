@@ -1,4 +1,5 @@
 // Copyright (C) 2013 - 2015, Lefteris Zafiris <zaf@fastmail.com>
+// Copyright (C) 2018 Jan Hoffmann
 // This program is free software, distributed under the terms of
 // the BSD 3-Clause License. See the LICENSE file
 // at the top of the source tree.
@@ -42,6 +43,8 @@ import (
 type Session struct {
 	Env    map[string]string //AGI environment variables.
 	buf    *bufio.ReadWriter //AGI I/O buffer.
+	lines  chan []byte       //receive channel filled from reader
+	err    error             //error from reader
 	hungup bool              //whether a HANGUP request has been received
 }
 
@@ -67,11 +70,15 @@ func (a *Session) Init(rw *bufio.ReadWriter) error {
 	} else {
 		a.buf = rw
 	}
+	a.lines = make(chan []byte, 100)
+	go a.read()
 	err := a.parseEnv()
 	return err
 }
 
 // IsHungup returns true if the channel is hung up.
+// Note that only hangup events received prior to the last command are guaranteed
+// to be considered for the result, although later ones may be included.
 func (a *Session) IsHungup() bool {
 	return a.hungup
 }

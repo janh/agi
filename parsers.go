@@ -1,4 +1,5 @@
 // Copyright (C) 2013 - 2015, Lefteris Zafiris <zaf@fastmail.com>
+// Copyright (C) 2018 Jan Hoffmann
 // This program is free software, distributed under the terms of
 // the BSD 3-Clause License. See the LICENSE file
 // at the top of the source tree.
@@ -19,12 +20,41 @@ const (
 	envMax = 150 // Maximum number of AGI environment args
 )
 
+// read writes lines from the reader to the input channel.
+func (a *Session) read() {
+	var line []byte
+	var err error
+	for {
+		line, err = a.buf.ReadBytes(10)
+		if err != nil {
+			a.err = err
+			close(a.lines)
+			return
+		}
+		// check for HANGUP request
+		if bytes.Equal(line, []byte("HANGUP\n")) {
+			a.hungup = true
+		} else {
+			a.lines <- line
+		}
+	}
+}
+
+// getLine reads a line from the input channel. Returns an error if no more lines are available.
+func (a *Session) getLine() ([]byte, error) {
+	line := <-a.lines
+	if line == nil {
+		return nil, a.err
+	}
+	return line, nil
+}
+
 // parseEnv reads and stores AGI environment.
 func (a *Session) parseEnv() error {
 	var err error
 	var line []byte
 	for i := 0; i <= envMax; i++ {
-		line, err = a.buf.ReadBytes(10)
+		line, err = a.getLine()
 		if err != nil || len(line) <= len("\r\n") {
 			break
 		}
@@ -51,15 +81,12 @@ func (a *Session) parseEnv() error {
 
 // sendMsg sends an AGI command and returns the result.
 func (a *Session) sendMsg(s string) (Reply, error) {
-	// Make sure there wasn't any data received, usually a HANGUP request from asterisk.
-	for a.buf.Reader.Buffered() != 0 {
-		line, _ := a.buf.ReadBytes(10)
+	// Make sure there wasn't any data received from Asterisk.
+	select {
+	case line := <-a.lines:
 		line = line[:len(line)-1]
-		if bytes.Equal(line, []byte("HANGUP")) {
-			a.hungup = true
-		} else {
-			return Reply{}, fmt.Errorf(string(line))
-		}
+		return Reply{}, errors.New(string(line))
+	default:
 	}
 	s = strings.Replace(s, "\r", " ", -1)
 	s = strings.Replace(s, "\n", " ", -1)
@@ -77,20 +104,13 @@ func (a *Session) parseResponse() (Reply, error) {
 	r := Reply{}
 	var line []byte
 	var err error
-	for {
-		line, err = a.buf.ReadBytes(10)
-		if err != nil {
-			return r, err
-		}
-		// Strip trailing newline
-		line = line[:len(line)-1]
-		// check for HANGUP request
-		if bytes.Equal(line, []byte("HANGUP")) {
-			a.hungup = true
-			continue
-		}
-		break
+	// Get line
+	line, err = a.getLine()
+	if err != nil {
+		return r, err
 	}
+	// Strip trailing newline
+	line = line[:len(line)-1]
 	ind := bytes.IndexByte(line, ' ')
 	if ind <= 0 || ind == len(line)-1 {
 		// Line doesn't match /^\w+\s.+$/
@@ -131,7 +151,7 @@ func (a *Session) parseResponse() (Reply, error) {
 		err = errors.New("invalid command syntax")
 	case "520-Invalid":
 		err = errors.New("invalid command syntax")
-		a.buf.ReadBytes(10) // Read Command syntax doc.
+		<-a.lines // Read Command syntax doc.
 	default:
 		err = fmt.Errorf("malformed or partial agi response: %s", string(line))
 	}

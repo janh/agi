@@ -1,4 +1,5 @@
 // Copyright (C) 2013 - 2015, Lefteris Zafiris <zaf@fastmail.com>
+// Copyright (C) 2018 Jan Hoffmann
 // This program is free software, distributed under the terms of
 // the BSD 3-Clause License. See the LICENSE file
 // at the top of the source tree.
@@ -90,6 +91,8 @@ func TestParseEnv(t *testing.T) {
 		bufio.NewReader(bytes.NewReader(env)),
 		bufio.NewWriter(ioutil.Discard),
 	)
+	a.lines = make(chan []byte, 100)
+	go a.read()
 	err := a.parseEnv()
 	if err != nil {
 		t.Fatalf("parseEnv failed: %v", err)
@@ -112,6 +115,8 @@ func TestParseEnv(t *testing.T) {
 		bufio.NewReader(bytes.NewReader(envInv)),
 		bufio.NewWriter(ioutil.Discard),
 	)
+	b.lines = make(chan []byte, 100)
+	go b.read()
 	err = b.parseEnv()
 	if err == nil {
 		t.Fatalf("parseEnv failed to detect invalid input: %v", b.Env)
@@ -126,6 +131,8 @@ func TestParseRespomse(t *testing.T) {
 		bufio.NewReader(bytes.NewReader(rep)),
 		bufio.NewWriter(ioutil.Discard),
 	)
+	a.lines = make(chan []byte, 100)
+	go a.read()
 	r, err := a.parseResponse()
 	if err != nil {
 		t.Errorf("Error parsing AGI 200 response: %v", err)
@@ -182,6 +189,8 @@ func TestParseRespomse(t *testing.T) {
 		bufio.NewReader(bytes.NewReader(repInv)),
 		bufio.NewWriter(ioutil.Discard),
 	)
+	b.lines = make(chan []byte, 100)
+	go b.read()
 	_, err = b.parseResponse()
 	if err == nil {
 		t.Error("No error after parsing a partial AGI response.")
